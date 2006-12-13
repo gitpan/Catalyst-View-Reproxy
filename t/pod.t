@@ -1,6 +1,7 @@
 #!perl -T
 
-use Test::Base;
+use lib qw(t/lib inc);
+use Test::More;
 eval "use Test::Pod 1.14";
 plan skip_all => "Test::Pod 1.14 required for testing POD" if $@;
 all_pod_files_ok();

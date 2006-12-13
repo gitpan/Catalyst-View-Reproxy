@@ -2,12 +2,12 @@
 
 use strict;
 use warnings;
-				use re 'taint';
-use lib qw(lib t/lib);
+use lib qw(t/lib inc);
 use Test::More;
 use FindBin;
 
 BEGIN {
+		$ENV{PATH} = '';
     $ENV{TESTAPP_CONFIG_LOCAL_SUFFIX} = 'debug';
 };
 

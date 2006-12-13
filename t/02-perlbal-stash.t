@@ -3,7 +3,7 @@
 use strict;
 use warnings;
 
-use lib qw(lib t/lib);
+use lib qw(t/lib inc);
 use Test::More;
 
 BEGIN {

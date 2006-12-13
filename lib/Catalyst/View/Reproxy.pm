@@ -22,11 +22,11 @@ Catalyst::View::Reproxy - Reproxing View for lighty and perlbal.
 
 =head1 VERSION
 
-Version 0.01
+Version 0.03
 
 =cut
 
-our $VERSION = '0.01';
+our $VERSION = '0.03';
 
 =head1 SYNOPSIS
 
@@ -54,7 +54,9 @@ In your controller class
 
 Constructor
 
-=head3 config, arguments
+=over 2
+
+=item config, arguments
 
 =over 2
 
@@ -78,6 +80,8 @@ Using external magic file (see L<File::MMagic>)
 
 Emulating "X-REPROXY-URL" without using perlbal, 
 L<LWP::UserAgent>'s timeout setting. (see L<LWP::UserAgent>)
+
+=back
 
 =back
 
@@ -126,12 +130,9 @@ Using 'X-REPROXY-URL',
   sub index: Private {
     my ($self, $c) = @_;
 
-    $c->view('MyReproxy', [reproxy_url => 
-      [
-        'http://my.domain01.org/path/to/file', 
-        'http://my.domain02.org/path/to/file'
-      ]
-    ]);
+		$c->view('MyReproxy')->process($c, 
+			'reproxy_file' => $c->path_to('DUMMY')
+		);
   }
 
 The url or path can be substituted to $c->stash instead of arguments,
@@ -164,7 +165,7 @@ sub process {
 		}
 }
 
-=head2 process_file
+=head2 process_file($c, $file, $arguments)
 
 processing file.
 

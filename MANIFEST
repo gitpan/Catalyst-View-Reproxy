@@ -50,5 +50,13 @@ t/conf/testapp_perlbal.json
 t/DUMMY
 t/DUMMY1
 t/DUMMY2
+t/lib/Catalyst/View/Reproxy/Test/HTTP/Server.pm
+t/lib/MY.pm
+t/lib/TestApp.pm
+t/lib/TestApp/Controller/Root.pm
+t/lib/TestApp/Controller/Test.pm
+t/lib/TestApp/Controller/Test/Forward.pm
+t/lib/TestApp/Controller/Test/View.pm
+t/lib/TestApp/View/ReproxyFile.pm
 t/pod-coverage.t
 t/pod.t

@@ -3,10 +3,14 @@
 use strict;
 use warnings;
 
-use lib qw(t/lib);
+use lib qw(t/lib inc);
 
 use FindBin;
 use Test::More;
+
+BEGIN {
+		$ENV{PATH} = '';
+};
 
 eval { use LWP::Simple; };
 plan(skip_all => 'LWP::Simple required') if ($@);
@@ -21,9 +25,9 @@ if ($pid = fork) {
 		ok($pid, 'create child process');
 		sleep 1;
 
-		ok(get("http://localhost:$ENV{TEST_HTTPD_PORT}/DUMMY"), 'Get DUMMY data');
-		ok(get("http://localhost:$ENV{TEST_HTTPD_PORT}/DUMMY1"), 'Get DUMMY1 data');
-		ok(get("http://localhost:$ENV{TEST_HTTPD_PORT}/DUMMY2"), 'Get DUMMY2 data');
+		ok(get("http://localhost:3500/DUMMY"), 'Get DUMMY data');
+		ok(get("http://localhost:3500/DUMMY1"), 'Get DUMMY1 data');
+		ok(get("http://localhost:3500/DUMMY2"), 'Get DUMMY2 data');
 
 		kill HUP => $pid;
 }
