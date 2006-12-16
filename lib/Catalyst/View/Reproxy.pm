@@ -22,11 +22,11 @@ Catalyst::View::Reproxy - Reproxing View for lighty and perlbal.
 
 =head1 VERSION
 
-Version 0.03
+Version 0.04
 
 =cut
 
-our $VERSION = '0.03';
+our $VERSION = '0.04';
 
 =head1 SYNOPSIS
 
@@ -201,11 +201,13 @@ sub process_file {
 				sysopen(SENDFILE, $file, O_RDONLY);
 				sysread(SENDFILE, $content, -s $file);
 
-				if ($self->mmagic) {
-						$c->response->content_type($self->mmagic->checktype_contents($content));
-				}
-				else {
-						$c->response->content_type(File::MimeInfo::mimetype(*SENDFILE));
+				unless ($c->response->content_type) {
+						if ($self->mmagic) {
+								$c->response->content_type($self->mmagic->checktype_contents($content));
+						}
+						else {
+								$c->response->content_type(File::MimeInfo::mimetype(*SENDFILE));
+						}
 				}
 
 				close(SENDFILE);
@@ -248,11 +250,13 @@ sub process_url {
 				if ($res->is_success) {
 						my $content = $res->content;
 
-						if ($self->mmagic) {
-								$c->response->content_type($self->mmagic->checktype_contents($content));
-						}
-						else {
-								$c->response->content_type($res->header('Content-Type'));
+						unless ($c->response->content_type) {
+								if ($self->mmagic) {
+										$c->response->content_type($self->mmagic->checktype_contents($content));
+								}
+								else {
+										$c->response->content_type($res->header('Content-Type'));
+								}
 						}
 
 						$c->response->content_length($res->header('Content-Length'));
