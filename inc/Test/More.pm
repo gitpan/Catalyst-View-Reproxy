@@ -4,6 +4,7 @@ package Test::More;
 use 5.004;
 
 use strict;
+use Test::Builder;
 
 
 # Can't use Carp because it might cause use_ok() to accidentally succeed
@@ -16,12 +17,12 @@ sub _carp {
 
 
 
+require Exporter;
 use vars qw($VERSION @ISA @EXPORT %EXPORT_TAGS $TODO);
-$VERSION = '0.64';
+$VERSION = '0.54';
 $VERSION = eval $VERSION;    # make the alpha version come out as a number
 
-use Test::Builder::Module;
-@ISA    = qw(Test::Builder::Module);
+@ISA    = qw(Exporter);
 @EXPORT = qw(ok use_ok require_ok
              is isnt like unlike is_deeply
              cmp_ok
@@ -32,113 +33,126 @@ use Test::Builder::Module;
              plan
              can_ok  isa_ok
              diag
-	     BAIL_OUT
             );
 
+my $Test = Test::Builder->new;
+my $Show_Diag = 1;
 
-#line 157
 
-sub plan {
-    my $tb = Test::More->builder;
-
-    $tb->plan(@_);
+# 5.004's Exporter doesn't have export_to_level.
+sub _export_to_level
+{
+      my $pkg = shift;
+      my $level = shift;
+      (undef) = shift;                  # redundant arg
+      my $callpkg = caller($level);
+      $pkg->export($callpkg, @_);
 }
 
 
-# This implements "use Test::More 'no_diag'" but the behavior is
-# deprecated.
-sub import_extra {
-    my $class = shift;
-    my $list  = shift;
+#line 177
 
-    my @other = ();
+sub plan {
+    my(@plan) = @_;
+
     my $idx = 0;
-    while( $idx <= $#{$list} ) {
-        my $item = $list->[$idx];
+    my @cleaned_plan;
+    while( $idx <= $#plan ) {
+        my $item = $plan[$idx];
 
-        if( defined $item and $item eq 'no_diag' ) {
-            $class->builder->no_diag(1);
+        if( $item eq 'no_diag' ) {
+            $Show_Diag = 0;
         }
         else {
-            push @other, $item;
+            push @cleaned_plan, $item;
         }
 
         $idx++;
     }
 
-    @$list = @other;
+    $Test->plan(@cleaned_plan);
+}
+
+sub import {
+    my($class) = shift;
+
+    my $caller = caller;
+
+    $Test->exported_to($caller);
+
+    my $idx = 0;
+    my @plan;
+    my @imports;
+    while( $idx <= $#_ ) {
+        my $item = $_[$idx];
+
+        if( $item eq 'import' ) {
+            push @imports, @{$_[$idx+1]};
+            $idx++;
+        }
+        else {
+            push @plan, $item;
+        }
+
+        $idx++;
+    }
+
+    plan(@plan);
+
+    __PACKAGE__->_export_to_level(1, __PACKAGE__, @imports);
 }
 
 
-#line 257
+#line 295
 
 sub ok ($;$) {
     my($test, $name) = @_;
-    my $tb = Test::More->builder;
-
-    $tb->ok($test, $name);
+    $Test->ok($test, $name);
 }
 
-#line 324
+#line 359
 
 sub is ($$;$) {
-    my $tb = Test::More->builder;
-
-    $tb->is_eq(@_);
+    $Test->is_eq(@_);
 }
 
 sub isnt ($$;$) {
-    my $tb = Test::More->builder;
-
-    $tb->isnt_eq(@_);
+    $Test->isnt_eq(@_);
 }
 
 *isn't = \&isnt;
 
 
-#line 369
+#line 400
 
 sub like ($$;$) {
-    my $tb = Test::More->builder;
-
-    $tb->like(@_);
+    $Test->like(@_);
 }
 
 
-#line 385
+#line 414
 
 sub unlike ($$;$) {
-    my $tb = Test::More->builder;
-
-    $tb->unlike(@_);
+    $Test->unlike(@_);
 }
 
 
-#line 425
+#line 452
 
 sub cmp_ok($$$;$) {
-    my $tb = Test::More->builder;
-
-    $tb->cmp_ok(@_);
+    $Test->cmp_ok(@_);
 }
 
 
-#line 461
+#line 486
 
 sub can_ok ($@) {
     my($proto, @methods) = @_;
     my $class = ref $proto || $proto;
-    my $tb = Test::More->builder;
-
-    unless( $class ) {
-        my $ok = $tb->ok( 0, "->can(...)" );
-        $tb->diag('    can_ok() called with empty class or reference');
-        return $ok;
-    }
 
     unless( @methods ) {
-        my $ok = $tb->ok( 0, "$class->can(...)" );
-        $tb->diag('    can_ok() called with no methods');
+        my $ok = $Test->ok( 0, "$class->can(...)" );
+        $Test->diag('    can_ok() called with no methods');
         return $ok;
     }
 
@@ -152,19 +166,18 @@ sub can_ok ($@) {
     my $name;
     $name = @methods == 1 ? "$class->can('$methods[0]')" 
                           : "$class->can(...)";
+    
+    my $ok = $Test->ok( !@nok, $name );
 
-    my $ok = $tb->ok( !@nok, $name );
-
-    $tb->diag(map "    $class->can('$_') failed\n", @nok);
+    $Test->diag(map "    $class->can('$_') failed\n", @nok);
 
     return $ok;
 }
 
-#line 525
+#line 543
 
 sub isa_ok ($$;$) {
     my($object, $class, $obj_name) = @_;
-    my $tb = Test::More->builder;
 
     my $diag;
     $obj_name = 'The object' unless defined $obj_name;
@@ -204,35 +217,40 @@ WHOA
 
     my $ok;
     if( $diag ) {
-        $ok = $tb->ok( 0, $name );
-        $tb->diag("    $diag\n");
+        $ok = $Test->ok( 0, $name );
+        $Test->diag("    $diag\n");
     }
     else {
-        $ok = $tb->ok( 1, $name );
+        $ok = $Test->ok( 1, $name );
     }
 
     return $ok;
 }
 
 
-#line 595
+#line 612
 
 sub pass (;$) {
-    my $tb = Test::More->builder;
-    $tb->ok(1, @_);
+    $Test->ok(1, @_);
 }
 
 sub fail (;$) {
-    my $tb = Test::More->builder;
-    $tb->ok(0, @_);
+    $Test->ok(0, @_);
 }
 
-#line 656
+#line 665
+
+sub diag {
+    return unless $Show_Diag;
+    $Test->diag(@_);
+}
+
+
+#line 721
 
 sub use_ok ($;@) {
     my($module, @imports) = @_;
     @imports = () unless @imports;
-    my $tb = Test::More->builder;
 
     my($pack,$filename,$line) = caller;
 
@@ -253,13 +271,13 @@ use $module \@imports;
 USE
     }
 
-    my $ok = $tb->ok( !$@, "use $module;" );
+    my $ok = $Test->ok( !$@, "use $module;" );
 
     unless( $ok ) {
         chomp $@;
         $@ =~ s{^BEGIN failed--compilation aborted at .*$}
                 {BEGIN failed--compilation aborted at $filename line $line.}m;
-        $tb->diag(<<DIAGNOSTIC);
+        $Test->diag(<<DIAGNOSTIC);
     Tried to use '$module'.
     Error:  $@
 DIAGNOSTIC
@@ -269,11 +287,10 @@ DIAGNOSTIC
     return $ok;
 }
 
-#line 705
+#line 769
 
 sub require_ok ($) {
     my($module) = shift;
-    my $tb = Test::More->builder;
 
     my $pack = caller;
 
@@ -287,11 +304,11 @@ package $pack;
 require $module;
 REQUIRE
 
-    my $ok = $tb->ok( !$@, "require $module;" );
+    my $ok = $Test->ok( !$@, "require $module;" );
 
     unless( $ok ) {
         chomp $@;
-        $tb->diag(<<DIAGNOSTIC);
+        $Test->diag(<<DIAGNOSTIC);
     Tried to require '$module'.
     Error:  $@
 DIAGNOSTIC
@@ -309,16 +326,56 @@ sub _is_module_name {
     # End with an alphanumeric.
     # The rest is an alphanumeric or ::
     $module =~ s/\b::\b//g;
-    $module =~ /^[a-zA-Z]\w*$/;
+    $module =~ /^[a-zA-Z]\w+$/;
 }
 
-#line 781
+#line 870
+
+#'#
+sub skip {
+    my($why, $how_many) = @_;
+
+    unless( defined $how_many ) {
+        # $how_many can only be avoided when no_plan is in use.
+        _carp "skip() needs to know \$how_many tests are in the block"
+          unless $Test->has_plan eq 'no_plan';
+        $how_many = 1;
+    }
+
+    for( 1..$how_many ) {
+        $Test->skip($why);
+    }
+
+    local $^W = 0;
+    last SKIP;
+}
+
+
+#line 951
+
+sub todo_skip {
+    my($why, $how_many) = @_;
+
+    unless( defined $how_many ) {
+        # $how_many can only be avoided when no_plan is in use.
+        _carp "todo_skip() needs to know \$how_many tests are in the block"
+          unless $Test->has_plan eq 'no_plan';
+        $how_many = 1;
+    }
+
+    for( 1..$how_many ) {
+        $Test->todo_skip($why);
+    }
+
+    local $^W = 0;
+    last TODO;
+}
+
+#line 1007
 
 use vars qw(@Data_Stack %Refs_Seen);
 my $DNE = bless [], 'Does::Not::Exist';
 sub is_deeply {
-    my $tb = Test::More->builder;
-
     unless( @_ == 2 or @_ == 3 ) {
         my $msg = <<WARNING;
 is_deeply() takes two or three args, you gave %d.
@@ -328,30 +385,26 @@ WARNING
         chop $msg;   # clip off newline so carp() will put in line/file
 
         _carp sprintf $msg, scalar @_;
-
-	return $tb->ok(0);
     }
 
     my($this, $that, $name) = @_;
 
-    $tb->_unoverload_str(\$that, \$this);
-
     my $ok;
-    if( !ref $this and !ref $that ) {  		# neither is a reference
-        $ok = $tb->is_eq($this, $that, $name);
+    if( !ref $this xor !ref $that ) {  # one's a reference, one isn't
+        $ok = 0;
     }
-    elsif( !ref $this xor !ref $that ) {  	# one's a reference, one isn't
-        $ok = $tb->ok(0, $name);
-	$tb->diag( _format_stack({ vals => [ $this, $that ] }) );
+    if( !ref $this and !ref $that ) {
+        $ok = $Test->is_eq($this, $that, $name);
     }
-    else {			       		# both references
+    else {
         local @Data_Stack = ();
+        local %Refs_Seen  = ();
         if( _deep_check($this, $that) ) {
-            $ok = $tb->ok(1, $name);
+            $ok = $Test->ok(1, $name);
         }
         else {
-            $ok = $tb->ok(0, $name);
-            $tb->diag(_format_stack(@Data_Stack));
+            $ok = $Test->ok(0, $name);
+            $ok = $Test->diag(_format_stack(@Data_Stack));
         }
     }
 
@@ -387,10 +440,9 @@ sub _format_stack {
     my $out = "Structures begin differing at:\n";
     foreach my $idx (0..$#vals) {
         my $val = $vals[$idx];
-        $vals[$idx] = !defined $val ? 'undef'          :
-                      $val eq $DNE  ? "Does not exist" :
-	              ref $val      ? "$val"           :
-                                      "'$val'";
+        $vals[$idx] = !defined $val ? 'undef' : 
+                      $val eq $DNE  ? "Does not exist"
+                                    : "'$val'";
     }
 
     $out .= "$vars[0] = $vals[0]\n";
@@ -406,86 +458,21 @@ sub _type {
 
     return '' if !ref $thing;
 
-    for my $type (qw(ARRAY HASH REF SCALAR GLOB CODE Regexp)) {
+    for my $type (qw(ARRAY HASH REF SCALAR GLOB Regexp)) {
         return $type if UNIVERSAL::isa($thing, $type);
     }
 
     return '';
 }
 
-#line 921
 
-sub diag {
-    my $tb = Test::More->builder;
-
-    $tb->diag(@_);
-}
-
-
-#line 990
-
-#'#
-sub skip {
-    my($why, $how_many) = @_;
-    my $tb = Test::More->builder;
-
-    unless( defined $how_many ) {
-        # $how_many can only be avoided when no_plan is in use.
-        _carp "skip() needs to know \$how_many tests are in the block"
-          unless $tb->has_plan eq 'no_plan';
-        $how_many = 1;
-    }
-
-    if( defined $how_many and $how_many =~ /\D/ ) {
-        _carp "skip() was passed a non-numeric number of tests.  Did you get the arguments backwards?";
-        $how_many = 1;
-    }
-
-    for( 1..$how_many ) {
-        $tb->skip($why);
-    }
-
-    local $^W = 0;
-    last SKIP;
-}
-
-
-#line 1077
-
-sub todo_skip {
-    my($why, $how_many) = @_;
-    my $tb = Test::More->builder;
-
-    unless( defined $how_many ) {
-        # $how_many can only be avoided when no_plan is in use.
-        _carp "todo_skip() needs to know \$how_many tests are in the block"
-          unless $tb->has_plan eq 'no_plan';
-        $how_many = 1;
-    }
-
-    for( 1..$how_many ) {
-        $tb->todo_skip($why);
-    }
-
-    local $^W = 0;
-    last TODO;
-}
-
-#line 1130
-
-sub BAIL_OUT {
-    my $reason = shift;
-    my $tb = Test::More->builder;
-
-    $tb->BAIL_OUT($reason);
-}
-
-#line 1169
+#line 1109
 
 #'#
 sub eq_array {
     local @Data_Stack;
-    _deep_check(@_);
+    local %Refs_Seen;
+    _eq_array(@_);
 }
 
 sub _eq_array  {
@@ -497,6 +484,13 @@ sub _eq_array  {
     }
 
     return 1 if $a1 eq $a2;
+
+    if($Refs_Seen{$a1}) {
+        return $Refs_Seen{$a1} eq $a2;
+    }
+    else {
+        $Refs_Seen{$a1} = "$a2";
+    }
 
     my $ok = 1;
     my $max = $#$a1 > $#$a2 ? $#$a1 : $#$a2;
@@ -516,24 +510,16 @@ sub _eq_array  {
 
 sub _deep_check {
     my($e1, $e2) = @_;
-    my $tb = Test::More->builder;
-
     my $ok = 0;
-
-    # Effectively turn %Refs_Seen into a stack.  This avoids picking up
-    # the same referenced used twice (such as [\$a, \$a]) to be considered
-    # circular.
-    local %Refs_Seen = %Refs_Seen;
 
     {
         # Quiet uninitialized value warnings when comparing undefs.
         local $^W = 0; 
 
-        $tb->_unoverload_str(\$e1, \$e2);
+        $Test->_unoverload(\$e1, \$e2);
 
         # Either they're both references or both not.
         my $same_ref = !(!ref $e1 xor !ref $e2);
-	my $not_ref  = (!ref $e1 and !ref $e2);
 
         if( defined $e1 xor defined $e2 ) {
             $ok = 0;
@@ -544,23 +530,12 @@ sub _deep_check {
         elsif ( $same_ref and ($e1 eq $e2) ) {
             $ok = 1;
         }
-	elsif ( $not_ref ) {
-	    push @Data_Stack, { type => '', vals => [$e1, $e2] };
-	    $ok = 0;
-	}
         else {
-            if( $Refs_Seen{$e1} ) {
-                return $Refs_Seen{$e1} eq $e2;
-            }
-            else {
-                $Refs_Seen{$e1} = "$e2";
-            }
-
             my $type = _type($e1);
-            $type = 'DIFFERENT' unless _type($e2) eq $type;
+            $type = '' unless _type($e2) eq $type;
 
-            if( $type eq 'DIFFERENT' ) {
-                push @Data_Stack, { type => $type, vals => [$e1, $e2] };
+            if( !$type ) {
+                push @Data_Stack, { vals => [$e1, $e2] };
                 $ok = 0;
             }
             elsif( $type eq 'ARRAY' ) {
@@ -570,7 +545,7 @@ sub _deep_check {
                 $ok = _eq_hash($e1, $e2);
             }
             elsif( $type eq 'REF' ) {
-                push @Data_Stack, { type => $type, vals => [$e1, $e2] };
+                push @Data_Stack, { type => 'REF', vals => [$e1, $e2] };
                 $ok = _deep_check($$e1, $$e2);
                 pop @Data_Stack if $ok;
             }
@@ -579,13 +554,6 @@ sub _deep_check {
                 $ok = _deep_check($$e1, $$e2);
                 pop @Data_Stack if $ok;
             }
-            elsif( $type ) {
-                push @Data_Stack, { type => $type, vals => [$e1, $e2] };
-                $ok = 0;
-            }
-	    else {
-		_whoa(1, "No type in _deep_check");
-	    }
         }
     }
 
@@ -593,22 +561,12 @@ sub _deep_check {
 }
 
 
-sub _whoa {
-    my($check, $desc) = @_;
-    if( $check ) {
-        die <<WHOA;
-WHOA!  $desc
-This should never happen!  Please contact the author immediately!
-WHOA
-    }
-}
-
-
-#line 1300
+#line 1211
 
 sub eq_hash {
     local @Data_Stack;
-    return _deep_check(@_);
+    local %Refs_Seen;
+    return _eq_hash(@_);
 }
 
 sub _eq_hash {
@@ -620,6 +578,13 @@ sub _eq_hash {
     }
 
     return 1 if $a1 eq $a2;
+
+    if( $Refs_Seen{$a1} ) {
+        return $Refs_Seen{$a1} eq $a2;
+    }
+    else {
+        $Refs_Seen{$a1} = "$a2";
+    }
 
     my $ok = 1;
     my $bigger = keys %$a1 > keys %$a2 ? $a1 : $a2;
@@ -637,7 +602,7 @@ sub _eq_hash {
     return $ok;
 }
 
-#line 1357
+#line 1263
 
 sub eq_set  {
     my($a1, $a2) = @_;
@@ -646,23 +611,23 @@ sub eq_set  {
     # There's faster ways to do this, but this is easiest.
     local $^W = 0;
 
-    # It really doesn't matter how we sort them, as long as both arrays are 
-    # sorted with the same algorithm.
-    #
-    # Ensure that references are not accidentally treated the same as a
-    # string containing the reference.
-    #
+    # We must make sure that references are treated neutrally.  It really
+    # doesn't matter how we sort them, as long as both arrays are sorted
+    # with the same algorithm.
     # Have to inline the sort routine due to a threading/sort bug.
     # See [rt.cpan.org 6782]
-    #
-    # I don't know how references would be sorted so we just don't sort
-    # them.  This means eq_set doesn't really work with refs.
     return eq_array(
-           [grep(ref, @$a1), sort( grep(!ref, @$a1) )],
-           [grep(ref, @$a2), sort( grep(!ref, @$a2) )],
+           [sort { ref $a ? -1 : ref $b ? 1 : $a cmp $b } @$a1],
+           [sort { ref $a ? -1 : ref $b ? 1 : $a cmp $b } @$a2]
     );
 }
 
-#line 1545
+#line 1306
+
+sub builder {
+    return Test::Builder->new;
+}
+
+#line 1446
 
 1;

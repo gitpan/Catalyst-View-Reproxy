@@ -12,7 +12,7 @@ license('perl');
 
 requires('Catalyst');
 requires('Catalyst::View');
-requires('Data::Dump');
+requires('Catalyst::Plugin::ConfigLoader');
 requires('Fcntl');
 requires('File::MimeInfo');
 requires('File::MMagic');

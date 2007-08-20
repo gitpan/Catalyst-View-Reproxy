@@ -1,16 +1,12 @@
 #!perl -T
 
-use strict;
-use warnings;
+BEGIN {
+    $ENV{PATH} = "";
+};
 
 use lib qw(t/lib inc);
-
 use FindBin;
 use Test::More;
-
-BEGIN {
-		$ENV{PATH} = '';
-};
 
 eval { use LWP::Simple; };
 plan(skip_all => 'LWP::Simple required') if ($@);
@@ -21,7 +17,8 @@ plan $@ ? (skip_all => 'HTTP::Server::Simple, HTTP::Server::Simple::Static requi
 ok (my $server = Catalyst::View::Reproxy::Test::HTTP::Server->new({port => 3500, docroot => $FindBin::Bin}), 'create http server instance');
 
 my $pid;
-if ($pid = fork) {
+
+if ( $pid = fork ) {
 		ok($pid, 'create child process');
 		sleep 1;
 

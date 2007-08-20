@@ -9,15 +9,15 @@ Catalyst::Helper::View::Reproxy - Helper class for Catalyst::View::Reproxy
 
 =head1 VERSION
 
-Version 0.04
+Version 0.05
 
 =cut
 
-our $VERSION = '0.04';
+our $VERSION = '0.05';
 
 =head1 SYNOPSIS
 
-  ./script/myapp_create.pl view Reproxy MyReproxy
+  ./script/myapp_create.pl view MyReproxy Reproxy
 
 =head1 METHODS
 
@@ -26,11 +26,9 @@ our $VERSION = '0.04';
 =cut
 
 sub mk_compclass {
-		my ($self, $helper) = @_;
-
-		$helper->render_file('viewclass', $helper->{file});
-
-		return 1;
+    my ( $self, $helper ) = @_;
+    $helper->render_file( 'viewclass', $helper->{file} );
+    return 1;
 }
 
 =head1 AUTHOR
@@ -84,7 +82,7 @@ under the same terms as Perl itself.
 
 =cut
 
-1; # End of Catalyst::Helper::View::Reproxy
+1;    # End of Catalyst::Helper::View::Reproxy
 
 __DATA__
 

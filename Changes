@@ -1,5 +1,9 @@
 Revision history for Catalyst-View-Reproxy
 
+0.05    2007-08-21/00:11
+        Fixed typo from X-REPROXY_EXPECTED_SIZE to 
+        X-REPROXY-EXPECTED-SIZE on Catalyst::View::Reproxy.
+
 0.04    2006-12-17/08:17
         Fixed content_type judgement.
 

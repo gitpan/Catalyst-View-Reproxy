@@ -5,13 +5,13 @@
 # This program is free software; you can redistribute it and/or modify it
 # under the same terms as Perl itself.
 
-#line 92
+#line 90
 
 package FindBin;
 use Carp;
 require 5.000;
 require Exporter;
-use Cwd qw(getcwd cwd abs_path);
+use Cwd qw(getcwd abs_path);
 use Config;
 use File::Basename;
 use File::Spec;
@@ -20,15 +20,7 @@ use File::Spec;
 %EXPORT_TAGS = (ALL => [qw($Bin $Script $RealBin $RealScript $Dir $RealDir)]);
 @ISA = qw(Exporter);
 
-$VERSION = "1.47";
-
-sub cwd2 {
-   my $cwd = getcwd();
-   # getcwd might fail if it hasn't access to the current directory.
-   # try harder.
-   defined $cwd or $cwd = cwd();
-   $cwd;
-}
+$VERSION = "1.44";
 
 sub init
 {
@@ -38,8 +30,9 @@ sub init
  if($0 eq '-e' || $0 eq '-')
   {
    # perl invoked with -e or script is on C<STDIN>
+
    $Script = $RealScript = $0;
-   $Bin    = $RealBin    = cwd2();
+   $Bin    = $RealBin    = getcwd();
   }
  else
   {
@@ -83,9 +76,9 @@ sub init
 
      croak("Cannot find current script '$0'") unless(-f $script);
 
-     # Ensure $script contains the complete path in case we C<chdir>
+     # Ensure $script contains the complete path incase we C<chdir>
 
-     $script = File::Spec->catfile(cwd2(), $script)
+     $script = File::Spec->catfile(getcwd(), $script)
        unless File::Spec->file_name_is_absolute($script);
 
      ($Script,$Bin) = fileparse($script);
@@ -104,11 +97,7 @@ sub init
       }
 
      # Get absolute paths to directories
-     if ($Bin) {
-      my $BinOld = $Bin;
-      $Bin = abs_path($Bin);
-      defined $Bin or $Bin = File::Spec->canonpath($BinOld);
-     }
+     $Bin     = abs_path($Bin)     if($Bin);
      $RealBin = abs_path($RealBin) if($RealBin);
     }
   }
@@ -119,3 +108,4 @@ BEGIN { init }
 *again = \&init;
 
 1; # Keep require happy
+

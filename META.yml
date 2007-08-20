@@ -1,6 +1,7 @@
-abstract: View class for lighty X-SendFile and perlbal X-REPROXY-FILE, X-REPROXY-URL
-author: Toru Yamaguchi
-build_requires: 
+---
+abstract: 'View class for lighty X-SendFile and perlbal X-REPROXY-FILE, X-REPROXY-URL'
+author: 'Toru Yamaguchi'
+build_requires:
   Catalyst::Plugin::ConfigLoader: 0
   Class::Accessor::Fast: 0
   FindBin: 0
@@ -10,14 +11,17 @@ build_requires:
   Test::Pod::Coverage: 0
   Test::WWW::Mechanize::Catalyst: 0
 distribution_type: module
-generated_by: Module::Install version 0.64
+generated_by: 'Module::Install version 0.67'
 license: perl
+meta-spec:
+  url: http://module-build.sourceforge.net/META-spec-v1.3.html
+  version: 1.3
 name: Catalyst-View-Reproxy
-no_index: 
-  directory: 
+no_index:
+  directory:
     - inc
     - t
-requires: 
+requires:
   Catalyst: 0
   Catalyst::View: 0
   Data::Dump: 0
@@ -29,4 +33,4 @@ requires:
   LWP::Simple: 0
   LWP::UserAgent: 0
   NEXT: 0
-version: 0.04
+version: 0.05

@@ -8,7 +8,7 @@ use Config::Any;
 use NEXT;
 use Data::Visitor::Callback;
 
-our $VERSION = '0.13';
+our $VERSION = '0.14';
 
 #line 46
 
@@ -142,6 +142,6 @@ sub finalize_config {
     $v->visit( $c->config );
 }
 
-#line 284
+#line 282
 
 1;

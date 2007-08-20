@@ -2,9 +2,12 @@
 package Test::WWW::Mechanize::Catalyst;
 use strict;
 use warnings;
+use Encode qw();
+use HTML::Entities;
 use Test::WWW::Mechanize;
 use base qw(Test::WWW::Mechanize);
-our $VERSION = "0.37";
+our $VERSION = "0.39";
+my $Test = Test::Builder->new();
 
 # the reason for the auxiliary package is that both WWW::Mechanize and
 # Catalyst::Test have a subroutine named 'request'
@@ -12,6 +15,21 @@ our $VERSION = "0.37";
 sub _make_request {
     my ( $self, $request ) = @_;
     $self->cookie_jar->add_cookie_header($request) if $self->cookie_jar;
+
+    unless ( $request->uri->as_string =~ m{^/}
+        || $request->uri->host eq 'localhost' )
+    {
+        return $self->SUPER::_make_request($request);
+    }
+
+    $request->authorization_basic(
+        LWP::UserAgent->get_basic_credentials(
+            undef, "Basic", $request->uri
+        )
+        )
+        if LWP::UserAgent->get_basic_credentials( undef, "Basic",
+        $request->uri );
+
     my $response = Test::WWW::Mechanize::Catalyst::Aux::request($request);
     $response->header( 'Content-Base', $request->uri );
     $response->request($request);
@@ -22,6 +40,11 @@ sub _make_request {
         && $response->code == 500
         && $response->content =~ /on Catalyst \d+\.\d+/ )
     {
+        my ($error)
+            = ( $response->content =~ /<code class="error">(.*?)<\/code>/s );
+        $error ||= "unknown error";
+        decode_entities($error);
+        $Test->diag("Catalyst error screen: $error");
         $response->content('');
         $response->content_type('');
     }
@@ -50,6 +73,13 @@ sub _make_request {
             $end_of_chain = $end_of_chain->previous;
         }                                          #   of the chain...
         $end_of_chain->previous($old_response);    # ...and add us to it
+    } else {
+        $response->{_raw_content} = $response->content;
+        if (   $response->header('Content-Type')
+            && $response->header('Content-Type') =~ m/charset=(\S+)/xms )
+        {
+            $response->content( Encode::decode( $1, $response->content ) );
+        }
     }
 
     return $response;

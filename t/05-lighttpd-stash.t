@@ -8,7 +8,6 @@ use Test::More;
 use FindBin;
 
 BEGIN {
-		$ENV{PATH} = '';
 		$ENV{TESTAPP_CONFIG_LOCAL_SUFFIX} = 'lighttpd';
 };
 

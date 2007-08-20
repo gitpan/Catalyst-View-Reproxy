@@ -9,7 +9,7 @@ $^C ||= 0;
 
 use strict;
 use vars qw($VERSION);
-$VERSION = '0.33';
+$VERSION = '0.22';
 $VERSION = eval $VERSION;    # make the alpha version come out as a number
 
 # Make Test::Builder thread-safe for ithreads.
@@ -66,81 +66,80 @@ BEGIN {
 }
 
 
-#line 127
+#line 122
 
 my $Test = Test::Builder->new;
 sub new {
     my($class) = shift;
-    $Test ||= $class->create;
+    $Test ||= bless ['Move along, nothing to see here'], $class;
     return $Test;
 }
 
+#line 139
 
-#line 149
-
-sub create {
-    my $class = shift;
-
-    my $self = bless {}, $class;
-    $self->reset;
-
-    return $self;
-}
-
-#line 168
-
+my $Test_Died;
+my $Have_Plan;
+my $No_Plan;
+my $Curr_Test;     share($Curr_Test);
 use vars qw($Level);
+my $Original_Pid;
+my @Test_Results;  share(@Test_Results);
+
+my $Exported_To;
+my $Expected_Tests;
+
+my $Skip_All;
+
+my $Use_Nums;
+
+my($No_Header, $No_Ending);
+
+$Test->reset;
 
 sub reset {
     my ($self) = @_;
 
-    # We leave this a global because it has to be localized and localizing
-    # hash keys is just asking for pain.  Also, it was documented.
-    $Level = 1;
+    $Test_Died = 0;
+    $Have_Plan = 0;
+    $No_Plan   = 0;
+    $Curr_Test = 0;
+    $Level     = 1;
+    $Original_Pid = $$;
+    @Test_Results = ();
 
-    $self->{Test_Died}    = 0;
-    $self->{Have_Plan}    = 0;
-    $self->{No_Plan}      = 0;
-    $self->{Original_Pid} = $$;
+    $Exported_To    = undef;
+    $Expected_Tests = 0;
 
-    share($self->{Curr_Test});
-    $self->{Curr_Test}    = 0;
-    $self->{Test_Results} = &share([]);
+    $Skip_All = 0;
 
-    $self->{Exported_To}    = undef;
-    $self->{Expected_Tests} = 0;
+    $Use_Nums = 1;
 
-    $self->{Skip_All}   = 0;
-
-    $self->{Use_Nums}   = 1;
-
-    $self->{No_Header}  = 0;
-    $self->{No_Ending}  = 0;
+    ($No_Header, $No_Ending) = (0,0);
 
     $self->_dup_stdhandles unless $^C;
 
     return undef;
 }
 
-#line 220
+#line 202
 
 sub exported_to {
     my($self, $pack) = @_;
 
     if( defined $pack ) {
-        $self->{Exported_To} = $pack;
+        $Exported_To = $pack;
     }
-    return $self->{Exported_To};
+    return $Exported_To;
 }
 
-#line 242
+#line 224
 
 sub plan {
     my($self, $cmd, $arg) = @_;
 
     return unless $cmd;
 
-    if( $self->{Have_Plan} ) {
+    if( $Have_Plan ) {
         die sprintf "You tried to plan twice!  Second plan at %s line %d\n",
           ($self->caller)[1,2];
     }
@@ -172,7 +171,7 @@ sub plan {
     return 1;
 }
 
-#line 289
+#line 271
 
 sub expected_tests {
     my $self = shift;
@@ -182,36 +181,32 @@ sub expected_tests {
         die "Number of tests must be a postive integer.  You gave it '$max'.\n"
           unless $max =~ /^\+?\d+$/ and $max > 0;
 
-        $self->{Expected_Tests} = $max;
-        $self->{Have_Plan}      = 1;
+        $Expected_Tests = $max;
+        $Have_Plan      = 1;
 
         $self->_print("1..$max\n") unless $self->no_header;
     }
-    return $self->{Expected_Tests};
+    return $Expected_Tests;
 }
 
 
-#line 314
+#line 296
 
 sub no_plan {
-    my $self = shift;
-
-    $self->{No_Plan}   = 1;
-    $self->{Have_Plan} = 1;
+    $No_Plan    = 1;
+    $Have_Plan  = 1;
 }
 
-#line 329
+#line 309
 
 sub has_plan {
-    my $self = shift;
-
-    return($self->{Expected_Tests}) if $self->{Expected_Tests};
-    return('no_plan') if $self->{No_Plan};
-    return(undef);
+	return($Expected_Tests) if $Expected_Tests;
+	return('no_plan') if $No_Plan;
+	return(undef);
 };
 
 
-#line 347
+#line 325
 
 sub skip_all {
     my($self, $reason) = @_;
@@ -220,13 +215,13 @@ sub skip_all {
     $out .= " # Skip $reason" if $reason;
     $out .= "\n";
 
-    $self->{Skip_All} = 1;
+    $Skip_All = 1;
 
     $self->_print($out) unless $self->no_header;
     exit(0);
 }
 
-#line 380
+#line 358
 
 sub ok {
     my($self, $test, $name) = @_;
@@ -235,16 +230,16 @@ sub ok {
     # store, so we turn it into a boolean.
     $test = $test ? 1 : 0;
 
-    unless( $self->{Have_Plan} ) {
+    unless( $Have_Plan ) {
         require Carp;
         Carp::croak("You tried to run a test without a plan!  Gotta have a plan.");
     }
 
-    lock $self->{Curr_Test};
-    $self->{Curr_Test}++;
+    lock $Curr_Test;
+    $Curr_Test++;
 
     # In case $name is a string overloaded object, force it to stringify.
-    $self->_unoverload_str(\$name);
+    $self->_unoverload(\$name);
 
     $self->diag(<<ERR) if defined $name and $name =~ /^[\d\s]+$/;
     You named your test '$name'.  You shouldn't use numbers for your test names.
@@ -254,7 +249,7 @@ ERR
     my($pack, $file, $line) = $self->caller;
 
     my $todo = $self->todo($pack);
-    $self->_unoverload_str(\$todo);
+    $self->_unoverload(\$todo);
 
     my $out;
     my $result = &share({});
@@ -268,7 +263,7 @@ ERR
     }
 
     $out .= "ok";
-    $out .= " $self->{Curr_Test}" if $self->use_numbers;
+    $out .= " $Curr_Test" if $self->use_numbers;
 
     if( defined $name ) {
         $name =~ s|#|\\#|g;     # # in a name can confuse Test::Harness.
@@ -289,7 +284,7 @@ ERR
         $result->{type}   = '';
     }
 
-    $self->{Test_Results}[$self->{Curr_Test}-1] = $result;
+    $Test_Results[$Curr_Test-1] = $result;
     $out .= "\n";
 
     $self->_print($out);
@@ -297,14 +292,7 @@ ERR
     unless( $test ) {
         my $msg = $todo ? "Failed (TODO)" : "Failed";
         $self->_print_diag("\n") if $ENV{HARNESS_ACTIVE};
-
-	if( defined $name ) {
-	    $self->diag(qq[  $msg test '$name'\n]);
-	    $self->diag(qq[  in $file at line $line.\n]);
-	}
-	else {
-	    $self->diag(qq[  $msg test in $file at line $line.\n]);
-	}
+        $self->diag("    $msg test ($file at line $line)\n");
     } 
 
     return $test ? 1 : 0;
@@ -313,7 +301,6 @@ ERR
 
 sub _unoverload {
     my $self  = shift;
-    my $type  = shift;
 
     local($@,$!);
 
@@ -321,8 +308,8 @@ sub _unoverload {
 
     foreach my $thing (@_) {
         eval { 
-            if( _is_object($$thing) ) {
-                if( my $string_meth = overload::Method($$thing, $type) ) {
+            if( defined $$thing ) {
+                if( my $string_meth = overload::Method($$thing, '""') ) {
                     $$thing = $$thing->$string_meth();
                 }
             }
@@ -331,49 +318,11 @@ sub _unoverload {
 }
 
 
-sub _is_object {
-    my $thing = shift;
-
-    return eval { ref $thing && $thing->isa('UNIVERSAL') } ? 1 : 0;
-}
-
-
-sub _unoverload_str {
-    my $self = shift;
-
-    $self->_unoverload(q[""], @_);
-}    
-
-sub _unoverload_num {
-    my $self = shift;
-
-    $self->_unoverload('0+', @_);
-
-    for my $val (@_) {
-        next unless $self->_is_dualvar($$val);
-        $$val = $$val+0;
-    }
-}
-
-
-# This is a hack to detect a dualvar such as $!
-sub _is_dualvar {
-    my($self, $val) = @_;
-
-    local $^W = 0;
-    my $numval = $val+0;
-    return 1 if $numval != 0 and $numval ne $val;
-}
-
-
-
-#line 535
+#line 469
 
 sub is_eq {
     my($self, $got, $expect, $name) = @_;
     local $Level = $Level + 1;
-
-    $self->_unoverload_str(\$got, \$expect);
 
     if( !defined $got || !defined $expect ) {
         # undef only matches undef and nothing else
@@ -390,8 +339,6 @@ sub is_eq {
 sub is_num {
     my($self, $got, $expect, $name) = @_;
     local $Level = $Level + 1;
-
-    $self->_unoverload_num(\$got, \$expect);
 
     if( !defined $got || !defined $expect ) {
         # undef only matches undef and nothing else
@@ -416,7 +363,7 @@ sub _is_diag {
             }
             else {
                 # force numeric context
-                $self->_unoverload_num($val);
+                $$val = $$val+0;
             }
         }
         else {
@@ -431,7 +378,7 @@ DIAGNOSTIC
 
 }    
 
-#line 613
+#line 543
 
 sub isnt_eq {
     my($self, $got, $dont_expect, $name) = @_;
@@ -466,7 +413,7 @@ sub isnt_num {
 }
 
 
-#line 665
+#line 595
 
 sub like {
     my($self, $this, $regex, $name) = @_;
@@ -482,7 +429,7 @@ sub unlike {
     $self->_regex_ok($this, $regex, '!~', $name);
 }
 
-#line 706
+#line 636
 
 
 sub maybe_regex {
@@ -511,6 +458,8 @@ sub maybe_regex {
 sub _regex_ok {
     my($self, $this, $regex, $cmp, $name) = @_;
 
+    local $Level = $Level + 1;
+
     my $ok = 0;
     my $usable_regex = $self->maybe_regex($regex);
     unless (defined $usable_regex) {
@@ -520,19 +469,9 @@ sub _regex_ok {
     }
 
     {
-        my $test;
-        my $code = $self->_caller_context;
-
-        local($@, $!);
-
-        # Yes, it has to look like this or 5.4.5 won't see the #line directive.
-        # Don't ask me, man, I just work here.
-        $test = eval "
-$code" . q{$test = $this =~ /$usable_regex/ ? 1 : 0};
-
+        local $^W = 0;
+        my $test = $this =~ /$usable_regex/ ? 1 : 0;
         $test = !$test if $cmp eq '!~';
-
-        local $Level = $Level + 1;
         $ok = $self->ok( $test, $name );
     }
 
@@ -549,35 +488,17 @@ DIAGNOSTIC
     return $ok;
 }
 
-#line 781
-
-
-my %numeric_cmps = map { ($_, 1) } 
-                       ("<",  "<=", ">",  ">=", "==", "!=", "<=>");
+#line 703
 
 sub cmp_ok {
     my($self, $got, $type, $expect, $name) = @_;
 
-    # Treat overloaded objects as numbers if we're asked to do a
-    # numeric comparison.
-    my $unoverload = $numeric_cmps{$type} ? '_unoverload_num'
-                                          : '_unoverload_str';
-
-    $self->$unoverload(\$got, \$expect);
-
-
     my $test;
     {
+        local $^W = 0;
         local($@,$!);   # don't interfere with $@
                         # eval() sometimes resets $!
-
-        my $code = $self->_caller_context;
-
-        # Yes, it has to look like this or 5.4.5 won't see the #line directive.
-        # Don't ask me, man, I just work here.
-        $test = eval "
-$code" . "\$got $type \$expect;";
-
+        $test = eval "\$got $type \$expect";
     }
     local $Level = $Level + 1;
     my $ok = $self->ok($test, $name);
@@ -605,50 +526,31 @@ sub _cmp_diag {
 DIAGNOSTIC
 }
 
+#line 751
 
-sub _caller_context {
-    my $self = shift;
-
-    my($pack, $file, $line) = $self->caller(1);
-
-    my $code = '';
-    $code .= "#line $line $file\n" if defined $file and defined $line;
-
-    return $code;
-}
-
-
-#line 860
-
-sub BAIL_OUT {
+sub BAILOUT {
     my($self, $reason) = @_;
 
-    $self->{Bailed_Out} = 1;
     $self->_print("Bail out!  $reason");
     exit 255;
 }
 
-#line 873
-
-*BAILOUT = \&BAIL_OUT;
-
-
-#line 885
+#line 767
 
 sub skip {
     my($self, $why) = @_;
     $why ||= '';
-    $self->_unoverload_str(\$why);
+    $self->_unoverload(\$why);
 
-    unless( $self->{Have_Plan} ) {
+    unless( $Have_Plan ) {
         require Carp;
         Carp::croak("You tried to run tests without a plan!  Gotta have a plan.");
     }
 
-    lock($self->{Curr_Test});
-    $self->{Curr_Test}++;
+    lock($Curr_Test);
+    $Curr_Test++;
 
-    $self->{Test_Results}[$self->{Curr_Test}-1] = &share({
+    $Test_Results[$Curr_Test-1] = &share({
         'ok'      => 1,
         actual_ok => 1,
         name      => '',
@@ -657,32 +559,32 @@ sub skip {
     });
 
     my $out = "ok";
-    $out   .= " $self->{Curr_Test}" if $self->use_numbers;
+    $out   .= " $Curr_Test" if $self->use_numbers;
     $out   .= " # skip";
     $out   .= " $why"       if length $why;
     $out   .= "\n";
 
-    $self->_print($out);
+    $Test->_print($out);
 
     return 1;
 }
 
 
-#line 930
+#line 812
 
 sub todo_skip {
     my($self, $why) = @_;
     $why ||= '';
 
-    unless( $self->{Have_Plan} ) {
+    unless( $Have_Plan ) {
         require Carp;
         Carp::croak("You tried to run tests without a plan!  Gotta have a plan.");
     }
 
-    lock($self->{Curr_Test});
-    $self->{Curr_Test}++;
+    lock($Curr_Test);
+    $Curr_Test++;
 
-    $self->{Test_Results}[$self->{Curr_Test}-1] = &share({
+    $Test_Results[$Curr_Test-1] = &share({
         'ok'      => 1,
         actual_ok => 0,
         name      => '',
@@ -691,16 +593,16 @@ sub todo_skip {
     });
 
     my $out = "not ok";
-    $out   .= " $self->{Curr_Test}" if $self->use_numbers;
+    $out   .= " $Curr_Test" if $self->use_numbers;
     $out   .= " # TODO & SKIP $why\n";
 
-    $self->_print($out);
+    $Test->_print($out);
 
     return 1;
 }
 
 
-#line 1001
+#line 883
 
 sub level {
     my($self, $level) = @_;
@@ -712,43 +614,42 @@ sub level {
 }
 
 
-#line 1036
+#line 918
 
 sub use_numbers {
     my($self, $use_nums) = @_;
 
     if( defined $use_nums ) {
-        $self->{Use_Nums} = $use_nums;
+        $Use_Nums = $use_nums;
     }
-    return $self->{Use_Nums};
+    return $Use_Nums;
+}
+
+#line 944
+
+sub no_header {
+    my($self, $no_header) = @_;
+
+    if( defined $no_header ) {
+        $No_Header = $no_header;
+    }
+    return $No_Header;
+}
+
+sub no_ending {
+    my($self, $no_ending) = @_;
+
+    if( defined $no_ending ) {
+        $No_Ending = $no_ending;
+    }
+    return $No_Ending;
 }
 
 
-#line 1070
-
-foreach my $attribute (qw(No_Header No_Ending No_Diag)) {
-    my $method = lc $attribute;
-
-    my $code = sub {
-        my($self, $no) = @_;
-
-        if( defined $no ) {
-            $self->{$attribute} = $no;
-        }
-        return $self->{$attribute};
-    };
-
-    no strict 'refs';
-    *{__PACKAGE__.'::'.$method} = $code;
-}
-
-
-#line 1124
+#line 1000
 
 sub diag {
     my($self, @msgs) = @_;
-
-    return if $self->no_diag;
     return unless @msgs;
 
     # Prevent printing headers when compiling (i.e. -c)
@@ -770,7 +671,7 @@ sub diag {
     return 0;
 }
 
-#line 1161
+#line 1035
 
 sub _print {
     my($self, @msgs) = @_;
@@ -795,7 +696,7 @@ sub _print {
 }
 
 
-#line 1192
+#line 1066
 
 sub _print_diag {
     my $self = shift;
@@ -805,33 +706,34 @@ sub _print_diag {
     print $fh @_;
 }    
 
-#line 1229
+#line 1103
 
+my($Out_FH, $Fail_FH, $Todo_FH);
 sub output {
     my($self, $fh) = @_;
 
     if( defined $fh ) {
-        $self->{Out_FH} = _new_fh($fh);
+        $Out_FH = _new_fh($fh);
     }
-    return $self->{Out_FH};
+    return $Out_FH;
 }
 
 sub failure_output {
     my($self, $fh) = @_;
 
     if( defined $fh ) {
-        $self->{Fail_FH} = _new_fh($fh);
+        $Fail_FH = _new_fh($fh);
     }
-    return $self->{Fail_FH};
+    return $Fail_FH;
 }
 
 sub todo_output {
     my($self, $fh) = @_;
 
     if( defined $fh ) {
-        $self->{Todo_FH} = _new_fh($fh);
+        $Todo_FH = _new_fh($fh);
     }
-    return $self->{Todo_FH};
+    return $Todo_FH;
 }
 
 
@@ -846,7 +748,6 @@ sub _new_fh {
         $fh = do { local *FH };
         open $fh, ">$file_or_fh" or 
             die "Can't open test output log $file_or_fh: $!";
-	_autoflush($fh);
     }
 
     return $fh;
@@ -855,7 +756,6 @@ sub _new_fh {
 
 sub _is_fh {
     my $maybe_fh = shift;
-    return 0 unless defined $maybe_fh;
 
     return 1 if ref \$maybe_fh eq 'GLOB'; # its a glob
 
@@ -875,10 +775,11 @@ sub _autoflush {
 }
 
 
+my $Opened_Testhandles = 0;
 sub _dup_stdhandles {
     my $self = shift;
 
-    $self->_open_testhandles;
+    $self->_open_testhandles unless $Opened_Testhandles;
 
     # Set everything to unbuffered else plain prints to STDOUT will
     # come out in the wrong order from our own prints.
@@ -887,15 +788,12 @@ sub _dup_stdhandles {
     _autoflush(\*TESTERR);
     _autoflush(\*STDERR);
 
-    $self->output(\*TESTOUT);
-    $self->failure_output(\*TESTERR);
-    $self->todo_output(\*TESTOUT);
+    $Test->output(\*TESTOUT);
+    $Test->failure_output(\*TESTERR);
+    $Test->todo_output(\*TESTOUT);
 }
 
-
-my $Opened_Testhandles = 0;
 sub _open_testhandles {
-    return if $Opened_Testhandles;
     # We dup STDOUT and STDERR so people can change them in their
     # test suites while still getting normal test output.
     open(TESTOUT, ">&STDOUT") or die "Can't dup STDOUT:  $!";
@@ -904,26 +802,25 @@ sub _open_testhandles {
 }
 
 
-#line 1347
+#line 1218
 
 sub current_test {
     my($self, $num) = @_;
 
-    lock($self->{Curr_Test});
+    lock($Curr_Test);
     if( defined $num ) {
-        unless( $self->{Have_Plan} ) {
+        unless( $Have_Plan ) {
             require Carp;
             Carp::croak("Can't change the current test number without a plan!");
         }
 
-        $self->{Curr_Test} = $num;
+        $Curr_Test = $num;
 
         # If the test counter is being pushed forward fill in the details.
-        my $test_results = $self->{Test_Results};
-        if( $num > @$test_results ) {
-            my $start = @$test_results ? @$test_results : 0;
+        if( $num > @Test_Results ) {
+            my $start = @Test_Results ? $#Test_Results + 1 : 0;
             for ($start..$num-1) {
-                $test_results->[$_] = &share({
+                $Test_Results[$_] = &share({
                     'ok'      => 1, 
                     actual_ok => undef, 
                     reason    => 'incrementing test number', 
@@ -933,43 +830,41 @@ sub current_test {
             }
         }
         # If backward, wipe history.  Its their funeral.
-        elsif( $num < @$test_results ) {
-            $#{$test_results} = $num - 1;
+        elsif( $num < @Test_Results ) {
+            $#Test_Results = $num - 1;
         }
     }
-    return $self->{Curr_Test};
+    return $Curr_Test;
 }
 
 
-#line 1393
+#line 1263
 
 sub summary {
     my($self) = shift;
 
-    return map { $_->{'ok'} } @{ $self->{Test_Results} };
+    return map { $_->{'ok'} } @Test_Results;
 }
 
-#line 1448
+#line 1318
 
 sub details {
-    my $self = shift;
-    return @{ $self->{Test_Results} };
+    return @Test_Results;
 }
 
-#line 1473
+#line 1342
 
 sub todo {
     my($self, $pack) = @_;
 
-    $pack = $pack || $self->exported_to || $self->caller($Level);
-    return 0 unless $pack;
+    $pack = $pack || $self->exported_to || $self->caller(1);
 
     no strict 'refs';
     return defined ${$pack.'::TODO'} ? ${$pack.'::TODO'}
                                      : 0;
 }
 
-#line 1494
+#line 1362
 
 sub caller {
     my($self, $height) = @_;
@@ -979,22 +874,20 @@ sub caller {
     return wantarray ? @caller : $caller[0];
 }
 
-#line 1506
+#line 1374
 
-#line 1520
+#line 1388
 
 #'#
 sub _sanity_check {
-    my $self = shift;
-
-    _whoa($self->{Curr_Test} < 0,  'Says here you ran a negative number of tests!');
-    _whoa(!$self->{Have_Plan} and $self->{Curr_Test}, 
+    _whoa($Curr_Test < 0,  'Says here you ran a negative number of tests!');
+    _whoa(!$Have_Plan and $Curr_Test, 
           'Somehow your tests ran without a plan!');
-    _whoa($self->{Curr_Test} != @{ $self->{Test_Results} },
+    _whoa($Curr_Test != @Test_Results,
           'Somehow you got a different number of results than tests ran!');
 }
 
-#line 1541
+#line 1407
 
 sub _whoa {
     my($check, $desc) = @_;
@@ -1006,7 +899,7 @@ WHOA
     }
 }
 
-#line 1562
+#line 1428
 
 sub _my_exit {
     $? = $_[0];
@@ -1015,7 +908,7 @@ sub _my_exit {
 }
 
 
-#line 1575
+#line 1441
 
 $SIG{__DIE__} = sub {
     # We don't want to muck with death in an eval, but $^S isn't
@@ -1026,100 +919,76 @@ $SIG{__DIE__} = sub {
     for( my $stack = 1;  my $sub = (CORE::caller($stack))[3];  $stack++ ) {
         $in_eval = 1 if $sub =~ /^\(eval\)/;
     }
-    $Test->{Test_Died} = 1 unless $in_eval;
+    $Test_Died = 1 unless $in_eval;
 };
 
 sub _ending {
     my $self = shift;
 
-    $self->_sanity_check();
+    _sanity_check();
 
     # Don't bother with an ending if this is a forked copy.  Only the parent
     # should do the ending.
-    # Exit if plan() was never called.  This is so "require Test::Simple" 
-    # doesn't puke.
-    # Don't do an ending if we bailed out.
-    if( ($self->{Original_Pid} != $$) 			or
-	(!$self->{Have_Plan} && !$self->{Test_Died}) 	or
-	$self->{Bailed_Out}
-      )
-    {
-	_my_exit($?);
-	return;
-    }
+    do{ _my_exit($?) && return } if $Original_Pid != $$;
+
+    # Bailout if plan() was never called.  This is so
+    # "require Test::Simple" doesn't puke.
+    do{ _my_exit(0) && return } if !$Have_Plan && !$Test_Died;
 
     # Figure out if we passed or failed and print helpful messages.
-    my $test_results = $self->{Test_Results};
-    if( @$test_results ) {
+    if( @Test_Results ) {
         # The plan?  We have no plan.
-        if( $self->{No_Plan} ) {
-            $self->_print("1..$self->{Curr_Test}\n") unless $self->no_header;
-            $self->{Expected_Tests} = $self->{Curr_Test};
+        if( $No_Plan ) {
+            $self->_print("1..$Curr_Test\n") unless $self->no_header;
+            $Expected_Tests = $Curr_Test;
         }
 
         # Auto-extended arrays and elements which aren't explicitly
         # filled in with a shared reference will puke under 5.8.0
         # ithreads.  So we have to fill them in by hand. :(
         my $empty_result = &share({});
-        for my $idx ( 0..$self->{Expected_Tests}-1 ) {
-            $test_results->[$idx] = $empty_result
-              unless defined $test_results->[$idx];
+        for my $idx ( 0..$Expected_Tests-1 ) {
+            $Test_Results[$idx] = $empty_result
+              unless defined $Test_Results[$idx];
         }
 
-        my $num_failed = grep !$_->{'ok'}, 
-                              @{$test_results}[0..$self->{Curr_Test}-1];
+        my $num_failed = grep !$_->{'ok'}, @Test_Results[0..$Expected_Tests-1];
+        $num_failed += abs($Expected_Tests - @Test_Results);
 
-        my $num_extra = $self->{Curr_Test} - $self->{Expected_Tests};
-
-        if( $num_extra < 0 ) {
-            my $s = $self->{Expected_Tests} == 1 ? '' : 's';
+        if( $Curr_Test < $Expected_Tests ) {
+            my $s = $Expected_Tests == 1 ? '' : 's';
             $self->diag(<<"FAIL");
-Looks like you planned $self->{Expected_Tests} test$s but only ran $self->{Curr_Test}.
+Looks like you planned $Expected_Tests test$s but only ran $Curr_Test.
 FAIL
         }
-        elsif( $num_extra > 0 ) {
-            my $s = $self->{Expected_Tests} == 1 ? '' : 's';
+        elsif( $Curr_Test > $Expected_Tests ) {
+            my $num_extra = $Curr_Test - $Expected_Tests;
+            my $s = $Expected_Tests == 1 ? '' : 's';
             $self->diag(<<"FAIL");
-Looks like you planned $self->{Expected_Tests} test$s but ran $num_extra extra.
+Looks like you planned $Expected_Tests test$s but ran $num_extra extra.
 FAIL
         }
-
-        if ( $num_failed ) {
-            my $num_tests = $self->{Curr_Test};
+        elsif ( $num_failed ) {
             my $s = $num_failed == 1 ? '' : 's';
-
-            my $qualifier = $num_extra == 0 ? '' : ' run';
-
             $self->diag(<<"FAIL");
-Looks like you failed $num_failed test$s of $num_tests$qualifier.
+Looks like you failed $num_failed test$s of $Expected_Tests.
 FAIL
         }
 
-        if( $self->{Test_Died} ) {
+        if( $Test_Died ) {
             $self->diag(<<"FAIL");
-Looks like your test died just after $self->{Curr_Test}.
+Looks like your test died just after $Curr_Test.
 FAIL
 
             _my_exit( 255 ) && return;
         }
 
-        my $exit_code;
-        if( $num_failed ) {
-            $exit_code = $num_failed <= 254 ? $num_failed : 254;
-        }
-        elsif( $num_extra != 0 ) {
-            $exit_code = 255;
-        }
-        else {
-            $exit_code = 0;
-        }
-
-        _my_exit( $exit_code ) && return;
+        _my_exit( $num_failed <= 254 ? $num_failed : 254  ) && return;
     }
-    elsif ( $self->{Skip_All} ) {
+    elsif ( $Skip_All ) {
         _my_exit( 0 ) && return;
     }
-    elsif ( $self->{Test_Died} ) {
+    elsif ( $Test_Died ) {
         $self->diag(<<'FAIL');
 Looks like your test died before it could output anything.
 FAIL
@@ -1135,6 +1004,6 @@ END {
     $Test->_ending if defined $Test and !$Test->no_ending;
 }
 
-#line 1747
+#line 1589
 
 1;

@@ -2,7 +2,7 @@
 package Class::Accessor::Fast;
 use base 'Class::Accessor';
 use strict;
-$Class::Accessor::Fast::VERSION = '0.25';
+$Class::Accessor::Fast::VERSION = '0.30';
 
 #line 32
 

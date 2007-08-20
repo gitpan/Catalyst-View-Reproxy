@@ -5,7 +5,6 @@ use warnings;
 
 use base qw/Catalyst::View/;
 
-use Data::Dump qw/dump/;
 use Fcntl;
 use File::MimeInfo qw//;
 use File::MMagic;
@@ -22,11 +21,11 @@ Catalyst::View::Reproxy - Reproxing View for lighty and perlbal.
 
 =head1 VERSION
 
-Version 0.04
+Version 0.05
 
 =cut
 
-our $VERSION = '0.04';
+our $VERSION = '0.05';
 
 =head1 SYNOPSIS
 
@@ -88,29 +87,32 @@ L<LWP::UserAgent>'s timeout setting. (see L<LWP::UserAgent>)
 =cut
 
 sub new {
-		my ($class, $c, $arguments) = @_;
+    my ( $class, $c, $arguments ) = @_;
 
-		my $config = {
-				lighttpd => 0,
-				perlbal => 0,
-				mime_magic => 0,
-				mime_magic_file => undef,
-				timeout => 0
-		};
+    my $config = {
+        lighttpd        => 0,
+        perlbal         => 0,
+        mime_magic      => 0,
+        mime_magic_file => undef,
+        timeout         => 0
+    };
 
-		$config = $class->merge_config_hashes($config, $arguments, $class->config);
-		$class->config($config);
+    $config =
+      $class->merge_config_hashes( $config, $arguments, $class->config );
+    $class->config($config);
 
-		my $self = $class->NEXT::new($c, $config);
+    my $self = $class->NEXT::new( $c, $config );
 
-		if ($config->{mime_magic} && $config->{mime_magic_file} && -e $config->{mime_magic_file}) {
-				$self->mmagic(File::MMagic->new($config->{mime_magic_file}));
-		}
+    if (   $config->{mime_magic}
+        && $config->{mime_magic_file}
+        && -e $config->{mime_magic_file} )
+    {
+        $self->mmagic( File::MMagic->new( $config->{mime_magic_file} ) );
+    }
 
-		$c->log->debug("$class config parameters");
-		$c->log->debug(dump $config);
+    $c->log->debug("$class config parameters");
 
-		return $self;
+    return $self;
 }
 
 =head2 process($c, $arguments)
@@ -147,22 +149,26 @@ The url or path can be substituted to $c->stash instead of arguments,
 =cut
 
 sub process {
-		my ($self, $c, %arguments) = @_;
+    my ( $self, $c, %arguments ) = @_;
 
-		my $file = $arguments{file} || $arguments{reproxy_file} || $c->stash->{reproxy_file};
-		my $url  = $arguments{url}  || $arguments{reproxy_url}  || $c->stash->{reproxy_url};
+    my $file = $arguments{file}
+      || $arguments{reproxy_file}
+      || $c->stash->{reproxy_file};
+    my $url = $arguments{url}
+      || $arguments{reproxy_url}
+      || $c->stash->{reproxy_url};
 
-		if ($file) {
-				$self->process_file($c, $file, \%arguments);
-		}
-		elsif ($url) {
-				$url = [split(/ /, $url)] unless (ref $url eq "ARRAY");
-				$self->process_url($c, $url, \%arguments);
-		}
-		else {
-				$c->response->status(403);
-				$c->log->error("No setting file or url");
-		}
+    if ($file) {
+        $self->process_file( $c, $file, \%arguments );
+    }
+    elsif ($url) {
+        $url = [ split( / /, $url ) ] unless ( ref $url eq "ARRAY" );
+        $self->process_url( $c, $url, \%arguments );
+    }
+    else {
+        $c->response->status(403);
+        $c->log->error("No setting file or url");
+    }
 }
 
 =head2 process_file($c, $file, $arguments)
@@ -172,51 +178,55 @@ processing file.
 =cut
 
 sub process_file {
-		my ($self, $c, $file, $arguments) = @_;
+    my ( $self, $c, $file, $arguments ) = @_;
 
-		if ($self->config->{perlbal} || $self->config->{lighttpd}) {
-				if ($self->config->{perlbal}) {
-						$c->response->header('X-REPROXY-FILE', $file);
+    if ( $self->config->{perlbal} || $self->config->{lighttpd} ) {
+        if ( $self->config->{perlbal} ) {
+            $c->response->header( 'X-REPROXY-FILE', $file );
 
-						my $expected_size = (-e $file) ? (-s $file) : $c->stash->{reproxy_expected_size};
-						
-						if (defined $expected_size) {
-								$c->response->header('X-REPROXY_EXPECTED_SIZE', $expected_size);
-						}
-				}
-				else {
-						$c->response->header('X-Sendfile', $file);
-				}
-		}
-		else {
-				unless (-e $file) {
-						$c->response->status(404);
-						$c->log->error("File not found");
-						return;
-				}
+            my $expected_size =
+              ( -e $file ) ? ( -s $file ) : $c->stash->{reproxy_expected_size};
 
-				my $content;
-				my $content_length = -s $file;
+            if ( defined $expected_size ) {
+                $c->response->header( 'X-REPROXY-EXPECTED-SIZE',
+                    $expected_size );
+            }
+        }
+        else {
+            $c->response->header( 'X-Sendfile', $file );
+        }
+    }
+    else {
+        unless ( -e $file ) {
+            $c->response->status(404);
+            $c->log->error("File not found");
+            return;
+        }
 
-				sysopen(SENDFILE, $file, O_RDONLY);
-				sysread(SENDFILE, $content, -s $file);
+        my $content;
+        my $content_length = -s $file;
 
-				unless ($c->response->content_type) {
-						if ($self->mmagic) {
-								$c->response->content_type($self->mmagic->checktype_contents($content));
-						}
-						else {
-								$c->response->content_type(File::MimeInfo::mimetype(*SENDFILE));
-						}
-				}
+        sysopen( SENDFILE, $file, O_RDONLY );
+        sysread( SENDFILE, $content, -s $file );
 
-				close(SENDFILE);
+        unless ( $c->response->content_type ) {
+            if ( $self->mmagic ) {
+                $c->response->content_type(
+                    $self->mmagic->checktype_contents($content) );
+            }
+            else {
+                $c->response->content_type(
+                    File::MimeInfo::mimetype(*SENDFILE) );
+            }
+        }
 
-				$c->response->content_length(-s $file);
-				$c->response->body($content);
-		}
+        close(SENDFILE);
 
-		$self->process_extra_headers($c, $arguments);
+        $c->response->content_length( -s $file );
+        $c->response->body($content);
+    }
+
+    $self->process_extra_headers( $c, $arguments );
 }
 
 =head2 process_url($c, $url, $arguments)
@@ -226,50 +236,52 @@ processing urls.
 =cut
 
 sub process_url {
-		my ($self, $c, $url, $arguments) =@_;
+    my ( $self, $c, $url, $arguments ) = @_;
 
-		if ($self->config->{perlbal}) {
-				$c->response->header('X-REPROXY-URL', join(" ", @$url));
+    if ( $self->config->{perlbal} ) {
+        $c->response->header( 'X-REPROXY-URL', join( " ", @$url ) );
 
-				my $expected_size = $c->stash->{reproxy_expected_size};
+        my $expected_size = $c->stash->{reproxy_expected_size};
 
-				if (defined $expected_size) {
-						$c->response->header('X-REPROXY_EXPECTED_SIZE', $expected_size);
-				}
-		}
-		else {
-				my $rand_url = $url->[int(rand(scalar @{$url}))];
+        if ( defined $expected_size ) {
+            $c->response->header( 'X-REPROXY_EXPECTED_SIZE', $expected_size );
+        }
+    }
+    else {
+        my $rand_url = $url->[ int( rand( scalar @{$url} ) ) ];
 
-				my $ua = LWP::UserAgent->new;
-				$ua->timeout(int $self->config->{timeout}) if ($self->config->{timeout});
+        my $ua = LWP::UserAgent->new;
+        $ua->timeout( int $self->config->{timeout} )
+          if ( $self->config->{timeout} );
 
-				my $req = HTTP::Request->new(GET => $rand_url);
-				$req->header('Accept' => '*');
-				my $res = $ua->request($req);
+        my $req = HTTP::Request->new( GET => $rand_url );
+        $req->header( 'Accept' => '*' );
+        my $res = $ua->request($req);
 
-				if ($res->is_success) {
-						my $content = $res->content;
+        if ( $res->is_success ) {
+            my $content = $res->content;
 
-						unless ($c->response->content_type) {
-								if ($self->mmagic) {
-										$c->response->content_type($self->mmagic->checktype_contents($content));
-								}
-								else {
-										$c->response->content_type($res->header('Content-Type'));
-								}
-						}
+            unless ( $c->response->content_type ) {
+                if ( $self->mmagic ) {
+                    $c->response->content_type(
+                        $self->mmagic->checktype_contents($content) );
+                }
+                else {
+                    $c->response->content_type( $res->header('Content-Type') );
+                }
+            }
 
-						$c->response->content_length($res->header('Content-Length'));
-						$c->response->body($res->content);
-				}
-				else {
-						$c->response->status(403);
-						$c->log->error("Request $url is not success");
-						return;
-				}
-		}
+            $c->response->content_length( $res->header('Content-Length') );
+            $c->response->body( $res->content );
+        }
+        else {
+            $c->response->status(403);
+            $c->log->error("Request $url is not success");
+            return;
+        }
+    }
 
-		$self->process_extra_headers($c, $arguments);
+    $self->process_extra_headers( $c, $arguments );
 }
 
 =head2 header_name($header)
@@ -279,13 +291,14 @@ Translating http header name.
 =cut
 
 sub header_name {
-		my ($self, $header) = @_;
+    my ( $self, $header ) = @_;
 
-		my $header_name = $header;
-		$header_name =~ s/_/-/g;
-		$header_name = join("-" => map { ucfirst lc $_ } split(/-/, $header_name));
+    my $header_name = $header;
+    $header_name =~ s/_/-/g;
+    $header_name =
+      join( "-" => map { ucfirst lc $_ } split( /-/, $header_name ) );
 
-		return $header_name;
+    return $header_name;
 }
 
 =head2 process_extra_headers($c, $arguments)
@@ -295,13 +308,14 @@ Setting extra http response headers.
 =cut
 
 sub process_extra_headers {
-		my ($self, $c, $arguments) = @_;
+    my ( $self, $c, $arguments ) = @_;
 
-		if ($arguments->{extra_headers}) {
-				foreach my $header (keys %{$arguments->{extra_headers}}) {
-						$c->response->header($self->header_name($header), $arguments->{extra_headers}->{$header});
-				}
-		}
+    if ( $arguments->{extra_headers} ) {
+        foreach my $header ( keys %{ $arguments->{extra_headers} } ) {
+            $c->response->header( $self->header_name($header),
+                $arguments->{extra_headers}->{$header} );
+        }
+    }
 }
 
 =head1 AUTHOR
